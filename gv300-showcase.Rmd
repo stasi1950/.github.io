@@ -1,0 +1,166 @@
+---
+title: "GV300 Showcase: Analyzing Democracy and Development"
+description: |
+  A showcase of my best code and visualization from GV300, exploring the
+  relationship between economic development and democratic governance.
+author:
+  - name: Alex Stasi
+date: 2026-02-15
+output:
+  distill::distill_article:
+    toc: true
+    code_folding: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+## Introduction
+
+One of the most studied questions in comparative politics is the relationship between economic development and democracy. Modernization theory, originally proposed by Seymour Martin Lipset in 1959, suggests that as countries become wealthier, they are more likely to develop and sustain democratic institutions.
+
+In this showcase, I present code and a visualization from a GV300 assignment where I explored this relationship using cross-national data. The analysis uses built-in R datasets and simulated country-level indicators to demonstrate data wrangling and visualization techniques.
+
+## Data Preparation
+
+The code below creates a dataset of country-level indicators including GDP per capita, a democracy score, population, and world region. This simulates the kind of cross-national data commonly used in comparative politics research.
+
+```{r data-prep}
+library(ggplot2)
+library(dplyr)
+
+# Create a simulated cross-national dataset for analysis
+set.seed(42)
+
+countries <- data.frame(
+  country = c("Norway", "Sweden", "Denmark", "Finland", "Germany",
+               "France", "UK", "Spain", "Italy", "Poland",
+               "USA", "Canada", "Mexico", "Brazil", "Argentina",
+               "Japan", "South Korea", "India", "China", "Indonesia",
+               "Nigeria", "South Africa", "Kenya", "Egypt", "Ghana",
+               "Australia", "New Zealand", "Chile", "Uruguay", "Costa Rica"),
+  gdp_per_capita = c(82000, 56000, 62000, 50000, 48000,
+                      42000, 46000, 30000, 34000, 18000,
+                      65000, 52000, 10000, 9000, 11000,
+                      40000, 32000, 2200, 12000, 4300,
+                      2100, 6500, 2000, 3800, 2400,
+                      55000, 42000, 15000, 18000, 12500),
+  democracy_score = c(9.8, 9.4, 9.3, 9.2, 8.7,
+                       8.1, 8.5, 7.9, 7.7, 6.8,
+                       7.9, 9.2, 5.6, 6.9, 7.0,
+                       8.1, 8.0, 7.3, 2.3, 6.5,
+                       4.1, 7.1, 5.1, 3.3, 6.0,
+                       9.1, 9.3, 8.3, 8.6, 8.2),
+  population_millions = c(5.4, 10.4, 5.8, 5.5, 83.2,
+                           67.4, 67.8, 47.4, 60.4, 37.7,
+                           331.0, 38.0, 128.9, 212.6, 45.4,
+                           125.8, 51.7, 1380.0, 1400.0, 273.5,
+                           206.1, 59.3, 53.8, 102.3, 31.1,
+                           25.7, 5.1, 19.1, 3.5, 5.1),
+  region = c(rep("Europe", 10),
+             rep("Americas", 5),
+             rep("Asia", 5),
+             rep("Africa", 5),
+             "Oceania", "Oceania", "Americas", "Americas", "Americas")
+)
+
+# Display the first few rows
+knitr::kable(head(countries, 10),
+             caption = "Sample of country-level indicators",
+             digits = 0)
+```
+
+The dataset contains `r nrow(countries)` countries across `r length(unique(countries$region))` world regions. GDP per capita ranges from `r format(min(countries$gdp_per_capita), big.mark = ",")` to `r format(max(countries$gdp_per_capita), big.mark = ",")` USD, and democracy scores range from `r min(countries$democracy_score)` to `r max(countries$democracy_score)` on a 0--10 scale.
+
+## Summary Statistics
+
+Before visualizing the data, I compute summary statistics by region to understand broad patterns.
+
+```{r summary-stats}
+region_summary <- countries %>%
+  group_by(region) %>%
+  summarise(
+    n_countries    = n(),
+    mean_gdp       = mean(gdp_per_capita),
+    mean_democracy = mean(democracy_score),
+    .groups = "drop"
+  ) %>%
+  arrange(desc(mean_democracy))
+
+knitr::kable(region_summary,
+             col.names = c("Region", "N", "Mean GDP/capita (USD)", "Mean Democracy Score"),
+             caption = "Regional averages of GDP per capita and democracy score",
+             digits = 1,
+             format.args = list(big.mark = ","))
+```
+
+## Visualization: GDP per Capita and Democracy
+
+The figure below is the centerpiece of this showcase. It plots GDP per capita against democracy score for each country, with points colored by region and sized by population. A LOESS smoothing line captures the overall trend.
+
+```{r main-plot, fig.width=9, fig.height=6, layout="l-body-outset"}
+ggplot(countries, aes(x = gdp_per_capita, y = democracy_score)) +
+  geom_smooth(method = "loess", formula = y ~ x,
+              color = "grey40", fill = "grey85",
+              linewidth = 0.8, alpha = 0.3, se = TRUE) +
+  geom_point(aes(color = region, size = population_millions),
+             alpha = 0.8) +
+  geom_text(aes(label = country),
+            size = 2.5, nudge_y = 0.25, check_overlap = TRUE) +
+  scale_x_continuous(
+    labels = scales::dollar_format(scale = 1/1000, suffix = "K"),
+    breaks = seq(0, 80000, 20000)
+  ) +
+  scale_size_continuous(
+    range = c(2, 12),
+    name = "Population\n(millions)",
+    breaks = c(10, 100, 500, 1000)
+  ) +
+  scale_color_brewer(palette = "Set2", name = "Region") +
+  labs(
+    title = "Economic Development and Democratic Governance",
+    subtitle = "Cross-national comparison of GDP per capita and democracy scores",
+    x = "GDP per Capita (USD, thousands)",
+    y = "Democracy Score (0-10)",
+    caption = "Data: Simulated indicators based on World Bank and V-Dem patterns\nGV300 Assignment | February 2026"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold", size = 15),
+    plot.subtitle = element_text(color = "grey40", size = 11),
+    plot.caption = element_text(color = "grey50", size = 9),
+    legend.position = "right",
+    panel.grid.minor = element_blank()
+  )
+```
+
+## Interpretation
+
+The scatter plot reveals several important patterns consistent with modernization theory:
+
+1. **Positive association**: There is a clear positive relationship between GDP per capita and democracy scores. Wealthier countries tend to have higher democracy scores, as the upward LOESS curve demonstrates. This aligns with the Lipset hypothesis that economic development creates conditions favorable to democratic governance.
+
+2. **Regional clustering**: European and Oceanian countries cluster in the upper-right quadrant (high income, high democracy), while African countries tend to appear in the lower-left quadrant (lower income, lower democracy scores). The Americas show substantial variation, with countries like Canada and the USA at the high end and Mexico and Brazil in the middle range.
+
+3. **Notable exceptions**: China stands out as a clear outlier -- it has a relatively high GDP per capita for its region but a very low democracy score (2.3). India presents another interesting case, with a relatively high democracy score (7.3) despite a low GDP per capita. These exceptions remind us that the modernization relationship is probabilistic, not deterministic.
+
+4. **Population does not determine regime type**: The size of the points shows that both large and small countries can be democratic or authoritarian. Population size appears largely independent of the development-democracy relationship.
+
+## Correlation Analysis
+
+```{r correlation}
+cor_test <- cor.test(countries$gdp_per_capita, countries$democracy_score)
+
+cat("Pearson correlation between GDP per capita and democracy score:\n")
+cat(sprintf("  r = %.3f, p-value = %.4f\n", cor_test$estimate, cor_test$p.value))
+cat(sprintf("  95%% CI: [%.3f, %.3f]\n", cor_test$conf.int[1], cor_test$conf.int[2]))
+```
+
+The Pearson correlation of `r round(cor_test$estimate, 3)` is statistically significant and indicates a moderately strong positive relationship. While this does not establish causation, it is consistent with the theoretical predictions of modernization theory and supports further investigation using regression analysis or panel data methods.
+
+## Conclusion
+
+This analysis demonstrates the use of `ggplot2` for multi-dimensional data visualization and `dplyr` for data summarization. The scatter plot effectively communicates the development-democracy relationship across 30 countries, using color, size, and labels to encode multiple variables simultaneously. The code is fully reproducible and follows tidy data principles.
+
+Source code for this site is available at [github.com/stasi1950/.github.io](https://github.com/stasi1950/.github.io).

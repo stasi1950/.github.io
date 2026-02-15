@@ -1,0 +1,29 @@
+---
+title: "Alex Stasi"
+image: "images/profile.png"
+links:
+  - label: GitHub
+    url: "https://github.com/stasi1950"
+  - label: GV300 Showcase
+    url: "gv300-showcase.html"
+  - label: About
+    url: "about.html"
+output:
+  postcards::trestles
+site: distill::distill_website
+---
+
+## About Me
+
+I am an undergraduate student studying political science and data analytics. My academic interests include comparative politics, quantitative research methods, and data-driven policy analysis.
+
+## Education
+
+**University** | B.A. in Political Science | Expected 2026
+
+## Interests
+
+- Quantitative Methods in Political Science
+- Data Visualization and Statistical Analysis
+- Comparative Government and Public Policy
+- Electoral Systems and Voting Behavior

@@ -1,0 +1,14 @@
+name: "stasi1950"
+title: "My Personal Website"
+description: |
+  Personal website and GV300 portfolio
+output_dir: "docs"
+navbar:
+  right:
+    - text: "Home"
+      href: index.html
+    - text: "About"
+      href: about.html
+    - text: "GV300 Showcase"
+      href: gv300-showcase.html
+output: distill::distill_article
