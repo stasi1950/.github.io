@@ -1,5 +1,5 @@
 ---
-title: "Alex Stasi"
+title: "Gabdolgalim Satpayev"
 image: "images/profile.png"
 links:
   - label: GitHub
