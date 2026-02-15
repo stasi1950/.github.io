@@ -1,8 +1,9 @@
 ---
-title: "GV300 Showcase: Analyzing Democracy and Development"
+title: "GV300 Showcase: Analysing the 2024 UK General Election"
 description: |
-  A showcase of my best code and visualization from GV300, exploring the
-  relationship between economic development and democratic governance.
+  A showcase of my best code and visualisation from GV300, exploring
+  constituency sizes, voter turnout, and representation in the 2024 UK
+  General Election.
 author:
   - name: Gabdolgalim Satpayev
 date: 2026-02-15
@@ -18,149 +19,243 @@ knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 
 ## Introduction
 
-One of the most studied questions in comparative politics is the relationship between economic development and democracy. Modernization theory, originally proposed by Seymour Martin Lipset in 1959, suggests that as countries become wealthier, they are more likely to develop and sustain democratic institutions.
+The 2024 UK General Election provides a rich dataset for examining how constituency sizes vary across the four nations, and how voter turnout differs between regions. In this showcase I present my best data-wrangling and visualisation code from GV300 Homework 2, where I analysed official candidate-level results published by the UK Parliament.
 
-In this showcase, I present code and a visualization from a GV300 assignment where I explored this relationship using cross-national data. The analysis uses built-in R datasets and simulated country-level indicators to demonstrate data wrangling and visualization techniques.
+The analysis addresses three questions:
+
+1. How much do constituency sizes vary, and what does that mean for equal representation?
+2. Which visualisation best reveals cross-country differences?
+3. Who isn't voting, and where is turnout lowest?
 
 ## Data Preparation
 
-The code below creates a dataset of country-level indicators including GDP per capita, a democracy score, population, and world region. This simulates the kind of cross-national data commonly used in comparative politics research.
+The code below loads the official 2024 candidacy-level CSV, cleans variable names, aggregates to constituency level, and computes a turnout measure.
 
 ```{r data-prep}
-library(ggplot2)
 library(dplyr)
+library(ggplot2)
+library(stringr)
 
-# Create a simulated cross-national dataset for analysis
-set.seed(42)
+uk_csv <- "https://electionresults.parliament.uk/general-elections/6/candidacies.csv"
+uk_raw <- read.csv(uk_csv, stringsAsFactors = FALSE)
 
-countries <- data.frame(
-  country = c("Norway", "Sweden", "Denmark", "Finland", "Germany",
-               "France", "UK", "Spain", "Italy", "Poland",
-               "USA", "Canada", "Mexico", "Brazil", "Argentina",
-               "Japan", "South Korea", "India", "China", "Indonesia",
-               "Nigeria", "South Africa", "Kenya", "Egypt", "Ghana",
-               "Australia", "New Zealand", "Chile", "Uruguay", "Costa Rica"),
-  gdp_per_capita = c(82000, 56000, 62000, 50000, 48000,
-                      42000, 46000, 30000, 34000, 18000,
-                      65000, 52000, 10000, 9000, 11000,
-                      40000, 32000, 2200, 12000, 4300,
-                      2100, 6500, 2000, 3800, 2400,
-                      55000, 42000, 15000, 18000, 12500),
-  democracy_score = c(9.8, 9.4, 9.3, 9.2, 8.7,
-                       8.1, 8.5, 7.9, 7.7, 6.8,
-                       7.9, 9.2, 5.6, 6.9, 7.0,
-                       8.1, 8.0, 7.3, 2.3, 6.5,
-                       4.1, 7.1, 5.1, 3.3, 6.0,
-                       9.1, 9.3, 8.3, 8.6, 8.2),
-  population_millions = c(5.4, 10.4, 5.8, 5.5, 83.2,
-                           67.4, 67.8, 47.4, 60.4, 37.7,
-                           331.0, 38.0, 128.9, 212.6, 45.4,
-                           125.8, 51.7, 1380.0, 1400.0, 273.5,
-                           206.1, 59.3, 53.8, 102.3, 31.1,
-                           25.7, 5.1, 19.1, 3.5, 5.1),
-  region = c(rep("Europe", 10),
-             rep("Americas", 5),
-             rep("Asia", 5),
-             rep("Africa", 5),
-             "Oceania", "Oceania", "Americas", "Americas", "Americas")
-)
+# Standardise column names to lower_snake_case
+names(uk_raw) <- names(uk_raw) %>%
+  tolower() %>%
+  str_replace_all("\\.", "_")
 
-# Display the first few rows
-knitr::kable(head(countries, 10),
-             caption = "Sample of country-level indicators",
-             digits = 0)
-```
+# Remove by-elections and keep key variables
+uk1 <- uk_raw %>%
+  filter(election_is_by_election == "false")
 
-The dataset contains `r nrow(countries)` countries across `r length(unique(countries$region))` world regions. GDP per capita ranges from `r format(min(countries$gdp_per_capita), big.mark = ",")` to `r format(max(countries$gdp_per_capita), big.mark = ",")` USD, and democracy scores range from `r min(countries$democracy_score)` to `r max(countries$democracy_score)` on a 0--10 scale.
+uk2 <- uk1 %>%
+  select(
+    constituency = constituency_name,
+    country      = country_name,
+    valid_votes  = candidate_vote_count,
+    electorate   = electorate
+  )
 
-## Summary Statistics
-
-Before visualizing the data, I compute summary statistics by region to understand broad patterns.
-
-```{r summary-stats}
-region_summary <- countries %>%
-  group_by(region) %>%
+# Aggregate from candidate-level to constituency-level
+uk3 <- uk2 %>%
+  group_by(country, constituency) %>%
   summarise(
-    n_countries    = n(),
-    mean_gdp       = mean(gdp_per_capita),
-    mean_democracy = mean(democracy_score),
-    .groups = "drop"
-  ) %>%
-  arrange(desc(mean_democracy))
+    valid_votes = sum(valid_votes, na.rm = TRUE),
+    electorate  = max(electorate, na.rm = TRUE),
+    .groups     = "drop"
+  )
 
-knitr::kable(region_summary,
-             col.names = c("Region", "N", "Mean GDP/capita (USD)", "Mean Democracy Score"),
-             caption = "Regional averages of GDP per capita and democracy score",
-             digits = 1,
-             format.args = list(big.mark = ","))
+# Compute turnout and drop invalid rows
+uk <- uk3 %>%
+  mutate(turnout_registered = 100 * valid_votes / electorate) %>%
+  filter(is.finite(turnout_registered), electorate > 0)
+
+knitr::kable(
+  head(uk, 10),
+  caption = "First 10 constituencies after cleaning",
+  digits = 1
+)
 ```
 
-## Visualization: GDP per Capita and Democracy
+After cleaning, the dataset contains **`r nrow(uk)` constituencies** across `r length(unique(uk$country))` countries of the United Kingdom.
 
-The figure below is the centerpiece of this showcase. It plots GDP per capita against democracy score for each country, with points colored by region and sized by population. A LOESS smoothing line captures the overall trend.
+## Smallest and Largest Constituencies
 
-```{r main-plot, fig.width=9, fig.height=6, layout="l-body-outset"}
-ggplot(countries, aes(x = gdp_per_capita, y = democracy_score)) +
-  geom_smooth(method = "loess", formula = y ~ x,
-              color = "grey40", fill = "grey85",
-              linewidth = 0.8, alpha = 0.3, se = TRUE) +
-  geom_point(aes(color = region, size = population_millions),
-             alpha = 0.8) +
-  geom_text(aes(label = country),
-            size = 2.5, nudge_y = 0.25, check_overlap = TRUE) +
-  scale_x_continuous(
-    labels = scales::dollar_format(scale = 1/1000, suffix = "K"),
-    breaks = seq(0, 80000, 20000)
-  ) +
-  scale_size_continuous(
-    range = c(2, 12),
-    name = "Population\n(millions)",
-    breaks = c(10, 100, 500, 1000)
-  ) +
-  scale_color_brewer(palette = "Set2", name = "Region") +
+```{r extremes}
+smallest <- uk %>%
+  arrange(valid_votes) %>%
+  slice_head(n = 5) %>%
+  select(constituency, country, valid_votes, electorate, turnout_registered)
+
+largest <- uk %>%
+  arrange(desc(valid_votes)) %>%
+  slice_head(n = 5) %>%
+  select(constituency, country, valid_votes, electorate, turnout_registered)
+
+knitr::kable(smallest, caption = "Five smallest constituencies by valid votes", digits = 1)
+knitr::kable(largest, caption = "Five largest constituencies by valid votes", digits = 1)
+
+ratio <- max(uk$valid_votes) / min(uk$valid_votes)
+```
+
+The largest constituency has roughly **`r round(ratio, 1)` times** as many valid votes as the smallest. Because each MP carries one vote in Parliament regardless of constituency size, voters in smaller constituencies effectively have more representation per person — raising questions about equal representation.
+
+## Visualisation: Cross-Country Comparison
+
+A faceted histogram is a natural first attempt, but it is hard to compare across panels with different y-scales. A **boxplot** makes cross-country differences immediately visible on a single axis.
+
+```{r boxplot, fig.width=8, fig.height=5, layout="l-body-outset"}
+p_box <- ggplot(uk, aes(x = country, y = valid_votes / 1000, fill = country)) +
+  geom_boxplot(alpha = 0.7, outlier.alpha = 0.4) +
   labs(
-    title = "Economic Development and Democratic Governance",
-    subtitle = "Cross-national comparison of GDP per capita and democracy scores",
-    x = "GDP per Capita (USD, thousands)",
-    y = "Democracy Score (0-10)",
-    caption = "Data: Simulated indicators based on World Bank and V-Dem patterns\nGV300 Assignment | February 2026"
+    title    = "Constituency Sizes by Country (2024 UK General Election)",
+    subtitle = "Boxplots allow direct comparison of medians, spread, and outliers",
+    x        = "Country",
+    y        = "Valid Votes (thousands)",
+    fill     = "Country"
   ) +
   theme_minimal(base_size = 13) +
   theme(
-    plot.title = element_text(face = "bold", size = 15),
-    plot.subtitle = element_text(color = "grey40", size = 11),
-    plot.caption = element_text(color = "grey50", size = 9),
-    legend.position = "right",
-    panel.grid.minor = element_blank()
+    plot.title      = element_text(face = "bold", size = 15),
+    plot.subtitle   = element_text(color = "grey40"),
+    legend.position = "none"
   )
+
+print(p_box)
 ```
 
-## Interpretation
+## Summary Statistics by Country
 
-The scatter plot reveals several important patterns consistent with modernization theory:
+```{r summary-stats}
+size_summary <- uk %>%
+  group_by(country) %>%
+  summarise(
+    n_constituencies = n(),
+    mean_votes       = mean(valid_votes),
+    median_votes     = median(valid_votes),
+    sd_votes         = sd(valid_votes),
+    min_votes        = min(valid_votes),
+    max_votes        = max(valid_votes),
+    .groups          = "drop"
+  ) %>%
+  arrange(desc(mean_votes))
 
-1. **Positive association**: There is a clear positive relationship between GDP per capita and democracy scores. Wealthier countries tend to have higher democracy scores, as the upward LOESS curve demonstrates. This aligns with the Lipset hypothesis that economic development creates conditions favorable to democratic governance.
-
-2. **Regional clustering**: European and Oceanian countries cluster in the upper-right quadrant (high income, high democracy), while African countries tend to appear in the lower-left quadrant (lower income, lower democracy scores). The Americas show substantial variation, with countries like Canada and the USA at the high end and Mexico and Brazil in the middle range.
-
-3. **Notable exceptions**: China stands out as a clear outlier -- it has a relatively high GDP per capita for its region but a very low democracy score (2.3). India presents another interesting case, with a relatively high democracy score (7.3) despite a low GDP per capita. These exceptions remind us that the modernization relationship is probabilistic, not deterministic.
-
-4. **Population does not determine regime type**: The size of the points shows that both large and small countries can be democratic or authoritarian. Population size appears largely independent of the development-democracy relationship.
-
-## Correlation Analysis
-
-```{r correlation}
-cor_test <- cor.test(countries$gdp_per_capita, countries$democracy_score)
-
-cat("Pearson correlation between GDP per capita and democracy score:\n")
-cat(sprintf("  r = %.3f, p-value = %.4f\n", cor_test$estimate, cor_test$p.value))
-cat(sprintf("  95%% CI: [%.3f, %.3f]\n", cor_test$conf.int[1], cor_test$conf.int[2]))
+knitr::kable(
+  size_summary,
+  col.names = c("Country", "N", "Mean", "Median", "SD", "Min", "Max"),
+  caption   = "Constituency sizes (valid votes) by country",
+  digits    = 0,
+  format.args = list(big.mark = ",")
+)
 ```
 
-The Pearson correlation of `r round(cor_test$estimate, 3)` is statistically significant and indicates a moderately strong positive relationship. While this does not establish causation, it is consistent with the theoretical predictions of modernization theory and supports further investigation using regression analysis or panel data methods.
+## Who Isn't Voting?
+
+```{r non-voters}
+non_voter_analysis <- uk %>%
+  mutate(non_voters = electorate - valid_votes)
+
+total_non_voters     <- sum(non_voter_analysis$non_voters)
+total_electorate     <- sum(non_voter_analysis$electorate)
+non_voter_percentage <- 100 * total_non_voters / total_electorate
+
+top_non_voters <- non_voter_analysis %>%
+  arrange(desc(non_voters)) %>%
+  slice_head(n = 10) %>%
+  select(constituency, country, electorate, valid_votes, non_voters, turnout_registered)
+
+knitr::kable(
+  top_non_voters,
+  caption = "Top 10 constituencies by number of non-voters",
+  digits  = 1,
+  format.args = list(big.mark = ",")
+)
+```
+
+Across all constituencies, approximately **`r format(round(total_non_voters), big.mark = ",")`** registered voters did not vote — about **`r round(non_voter_percentage, 1)`%** of the electorate. If non-voters are systematically different from voters (younger, poorer, more disengaged), then election outcomes may not reflect the preferences of the broader population.
+
+## Turnout by Category and Country
+
+```{r turnout-cats, fig.width=8, fig.height=5, layout="l-body-outset"}
+turnout_categories <- uk %>%
+  mutate(
+    turnout_category = case_when(
+      turnout_registered < 55 ~ "Low",
+      turnout_registered < 65 ~ "Medium",
+      turnout_registered < 75 ~ "High",
+      TRUE                    ~ "Very High"
+    ),
+    turnout_category = factor(
+      turnout_category,
+      levels = c("Low", "Medium", "High", "Very High")
+    )
+  )
+
+category_counts <- turnout_categories %>%
+  group_by(turnout_category, country) %>%
+  summarise(n_constituencies = n(), .groups = "drop")
+
+p_cats <- ggplot(category_counts,
+                 aes(x = turnout_category, y = n_constituencies, fill = country)) +
+  geom_col(position = "dodge") +
+  scale_fill_brewer(palette = "Set2") +
+  labs(
+    title = "Distribution of Constituencies by Turnout Category",
+    x     = "Turnout Category",
+    y     = "Number of Constituencies",
+    fill  = "Country"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title      = element_text(face = "bold", size = 15),
+    legend.position = "bottom"
+  )
+
+print(p_cats)
+```
+
+## High vs Low Turnout Constituencies
+
+```{r high-low}
+high_turnout <- uk %>% filter(turnout_registered > 70)
+low_turnout  <- uk %>% filter(turnout_registered < 60)
+
+high_summary <- high_turnout %>%
+  group_by(country) %>%
+  summarise(
+    n = n(),
+    mean_electorate = mean(electorate),
+    mean_turnout    = mean(turnout_registered),
+    .groups = "drop"
+  ) %>%
+  mutate(group = "High (>70%)")
+
+low_summary <- low_turnout %>%
+  group_by(country) %>%
+  summarise(
+    n = n(),
+    mean_electorate = mean(electorate),
+    mean_turnout    = mean(turnout_registered),
+    .groups = "drop"
+  ) %>%
+  mutate(group = "Low (<60%)")
+
+comparison <- bind_rows(high_summary, low_summary) %>%
+  select(group, country, n, mean_electorate, mean_turnout)
+
+knitr::kable(
+  comparison,
+  col.names = c("Group", "Country", "N", "Mean Electorate", "Mean Turnout (%)"),
+  caption   = "Comparison of high- and low-turnout constituencies",
+  digits    = 1,
+  format.args = list(big.mark = ",")
+)
+```
+
+Differences in turnout likely reflect socio-economic factors (deprivation, education), demographics (age structure), and political factors such as competitiveness and campaign intensity. Areas with greater political disengagement tend to exhibit lower turnout than places where voters are more engaged and parties campaign harder.
 
 ## Conclusion
 
-This analysis demonstrates the use of `ggplot2` for multi-dimensional data visualization and `dplyr` for data summarization. The scatter plot effectively communicates the development-democracy relationship across 30 countries, using color, size, and labels to encode multiple variables simultaneously. The code is fully reproducible and follows tidy data principles.
+This analysis demonstrates the use of `dplyr` for data wrangling and `ggplot2` for multi-dimensional visualisation. The boxplot and grouped bar chart effectively communicate cross-country differences in constituency size and voter turnout across the 2024 UK General Election.
 
 Source code for this site is available at [github.com/stasi1950/.github.io](https://github.com/stasi1950/.github.io).
