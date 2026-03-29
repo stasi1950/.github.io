@@ -1,0 +1,212 @@
+---
+title: "GV300 Assignment 5: Measurement, Reliability, Validity, IRT"
+author: "2403309"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+  pdf_document: default
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Homework 5
+
+Welcome to homework 5. Homework 5 is going to cover the two classes that we did on measurement and threats to validity, issues of reliability, etc. 
+
+We are going to use the dataset from before but I made some changes to the underlying data.
+
+# 1. Identify Q37 battery
+```{r load_data}
+load("/cloud/project/run_unbanked.RData")
+q37_names <- grep("^Q37_", names(run_unbanked), value = TRUE)
+```
+
+
+### Part A: Understand the battery
+
+1. How many items are in the `Q37_` battery?
+2. What are the response options (roughly)? Are they all on the same scale?
+
+```{r exercise_part_a}
+q37_names <- grep('^Q37_', names(run_unbanked), value = TRUE)
+length(q37_names)
+head(q37_names)
+table(is.na(run_unbanked$Q37_1))
+
+# Look at the distribution of responses for the first 2 items
+summary(run_unbanked$Q37_1)
+summary(run_unbanked$Q37_2)
+
+table(run_unbanked$Q37_1, useNA = "ifany")
+table(run_unbanked$Q37_2, useNA = "ifany")
+```
+
+The Q37 battery contains 12 items. They all enquire about trust in a various institution in the UK and they were all measured on a 0-10 scale with the 0 indicating that it does not trust it at all and 10 indicating that it totally trusts. Yes, and all items have the same response scale. The NA values are rather numerous 596 per item, which appears to be left by the dropped-out respondents who did not take this section of the survey. The answers in particular also appear logical where most respondents fall within the low-to-middle spectrum in the scale which is understandable considering that the items refer to trust in government and institutions.
+
+```{r part_a_plot}
+library(ggplot2)
+library(tidyr)
+
+# Make Q37 items numeric just in case
+q37_data <- run_unbanked[, q37_names]
+q37_data <- as.data.frame(lapply(q37_data, as.numeric))
+
+q37_long <- pivot_longer(q37_data, cols = everything(),
+                         names_to = "item", values_to = "response")
+
+ggplot(q37_long, aes(x = response)) +
+  geom_histogram(binwidth = 1, fill = "steelblue", color = "white") +
+  facet_wrap(~ item, ncol = 4) +
+  theme_minimal(base_size = 10) +
+  labs(title = "Distribution of Q37 Trust Items",
+       x = "Response (0-10)", y = "Count")
+```
+
+
+### Part B: Missing data
+
+In small datasets you can sometimes just drop missing values, but in surveys you should always *check how much* you are losing.
+
+1. What percent of cases are complete on all `Q37_` items?
+2. Question `Q76_` has relatively high missingness. What is it?
+
+```{r exercise_part_b}
+q37_data <- run_unbanked[, q37_names]
+q37_data <- as.data.frame(lapply(q37_data, as.numeric))
+
+complete_cases <- sum(complete.cases(q37_data))
+pct_complete <- round(100 * complete_cases / nrow(run_unbanked), 1)
+cat("Complete cases on Q37:", complete_cases, "out of", nrow(run_unbanked), 
+    paste0("(", pct_complete, "%)"), "\n")
+
+# Q76 missingness
+q76_missing <- sum(is.na(run_unbanked$Q76))
+cat("Q76 missing:", q76_missing, "out of", nrow(run_unbanked),
+    paste0("(", round(100 * q76_missing / nrow(run_unbanked), 1), "%)"), "\n")
+```
+
+Only 46 percent of cases have been complete with all 12 items of Q37. That is quite some size of information to lose merely doing listwise deletion. Nonetheless, considering the trend, the NAs appear to be mainly determined by individuals who did not complete the survey instead of the individuals who did not selectively ignore the questions concerning trust, so it is likely to be more reminiscent of Missing Completely At Random (MCAR) than it is systematic. Nevertheless, we must recognize that the respondents who participated in the entire survey may not necessarily be the ones who dropped out, i.e. possibly less interested or less trusting respondents did not respond to the second question and then this would be causing our findings to be biased towards the positive.
+
+Q76 concerns the level of disruption to the respondent that the closure of a local bank branch caused in their daily lives. It is approximately 61 percent missing, which is intentional, being an optional question that is only applicable to those who answered Q75 that is, branches actually closed near them with a Yes. Then the high missingness is not such an issue of data quality, it is simply the skip logic of the survey.
+
+
+### Part C: Reliability (Cronbach's alpha) and interpretation 
+
+We'll compute alpha again, then interpret it in plain language.
+
+1. Compute Cronbach's alpha for the `Q37_` battery.
+2. Based on alpha, would you feel comfortable combining these into a single scale? Explain why or why not.
+
+```{r exercise_part_c}
+library(psych)
+
+q37_num <- as.data.frame(lapply(run_unbanked[, q37_names], as.numeric))
+q37_complete <- q37_num[complete.cases(q37_num), ]
+
+alpha_result <- alpha(q37_complete)
+print(alpha_result)
+```
+
+Cronbach's alpha for the Q37 battery is about 0.92, which is well above the usual 0.7 threshold. This means the items are quite internally consistent — people who trust one institution tend to trust others too, and vice versa. Based on this I would feel fairly comfortable combining them into a single "institutional trust" scale. One thing to note is that the battery includes quite different institutions (NHS, social media, courts, etc.) so it is possible that a factor analysis might reveal sub-dimensions, but the overall internal consistency is strong.
+
+**Conceptual question:** A high alpha does *not* prove that a scale is valid. Alpha only tells us about internal consistency — whether the items hang together. Validity is about whether we are actually measuring the thing we think we are measuring. For example, all 12 items could be picking up on a general tendency to give high or low ratings (acquiescence bias) rather than genuine trust. To assess validity we would need to look at things like whether the scale correlates with outcomes we would expect it to (criterion validity) or whether the items actually map onto a coherent construct of "institutional trust" (construct validity).
+
+
+### Part D: Build a scale two ways 
+
+We will create two versions of a scale and compare them.
+
+1. A *sum score* (adds items).
+2. A *mean score* (average of items).
+
+Then compare the distributions.
+
+```{r exercise_part_d}
+q37_num <- as.data.frame(lapply(run_unbanked[, q37_names], as.numeric))
+q37_complete <- q37_num[complete.cases(q37_num), ]
+
+sum_score_ex <- rowSums(q37_complete)
+mean_score_ex <- rowMeans(q37_complete)
+scale_df <- data.frame(sum_score = sum_score_ex, mean_score = mean_score_ex)
+print(head(scale_df))
+
+p1 <- ggplot(scale_df, aes(x = sum_score)) +
+  geom_histogram(binwidth = 5, fill = 'steelblue', color = 'white') +
+  theme_minimal(base_size = 12) +
+  labs(title = 'Sum-score distribution', x = 'Sum score', y = 'Count')
+print(p1)
+
+p2 <- ggplot(scale_df, aes(x = mean_score)) +
+  geom_histogram(binwidth = 0.5, fill = 'coral', color = 'white') +
+  theme_minimal(base_size = 12) +
+  labs(title = 'Mean-score distribution', x = 'Mean score', y = 'Count')
+print(p2)
+```
+
+I would choose to present the average score in an article. The average score remains in the original 0-10 response scale, which is much easier read, a mean of 4.2 will at once tell you something about the degree of trust, whereas a total of 50 will tell you more, without knowing how many items are summed up. The average score is also stronger in the case of missing items: in case a respondent only responds to 10 of 12 questions, the mean does not make no sense but the sum would be systematically lower.
+
+
+## Part E
+
+Pick *one* demographic variable in the dataset (for example age, gender, education, income, region) and compare the scale across groups.
+
+The goal is not to do causal inference. The goal is to practice describing a pattern and thinking about measurement/bias.
+
+```{r exercise_optional}
+# Using education (Q9) as the grouping variable
+q37_num <- as.data.frame(lapply(run_unbanked[, q37_names], as.numeric))
+cc <- complete.cases(q37_num)
+mean_score_ex <- rowMeans(q37_num[cc, ])
+
+edu_raw <- run_unbanked$Q9[cc]
+# Remove "prefer not to say" (99)
+keep <- edu_raw != 99 & !is.na(edu_raw)
+
+tmp_df <- data.frame(
+  group = factor(edu_raw[keep],
+                 levels = 1:6,
+                 labels = c("Below GCSE", "GCSE", "Vocational", 
+                            "Degree", "Masters", "Doctorate")),
+  mean_score = mean_score_ex[keep]
+)
+
+ggplot(tmp_df, aes(x = group, y = mean_score)) +
+  geom_boxplot(fill = 'grey90') +
+  theme_minimal(base_size = 12) +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1)) +
+  labs(x = "Education Level", y = "Mean Q37 Trust Score",
+       title = "Institutional Trust by Education Level")
+```
+
+**Reliability threat:** One threat to reliability in this battery is that the items cover very different types of institutions — social media and the NHS, for example, are quite different things. Respondents might interpret "trust" differently depending on the institution, introducing noise and reducing the consistency of the scale across measurement occasions.
+
+**Validity threat:** A key validity concern is social desirability bias or acquiescence bias. Some respondents might tend to give moderate or high scores across the board without carefully thinking about each institution, meaning the scale captures response style rather than genuine trust.
+
+**Potential source of bias:** Respondents who are more politically engaged or informed might anchor their answers to recent news events (like a political scandal or an NHS crisis), whereas less informed respondents might give more generic middle-of-the-road answers. This means the scale could be measuring different things for different groups of people.
+
+
+## Part F 
+
+You have been hired as a Research Assistant to work for me. I give you the codebook for this dataset and explain that I am interested in whether a person's trust in the central bank is:
+
+- Primarily shaped by their own financial situation (personal),
+- Primarily shaped by their political opinions, or
+- Influenced by both
+
+Using what you have learned so far, write a brief research design (no more than 500 words). 
+
+---
+
+Q37_11 would be used as the dependent variable where the respondents are asked to provide the extent of trust that they have on the Bank of England on a 0-10 scale. This is the closest indicator of central bank trust in the data.
+
+On its part of the personal financial situation, I would employ a number of independent variables: Q68 (can make ends meet, 0-10), Q71 (gross household income, categorical), Q41 and Q42 (positive and negative events in the past year with regard to finances), and Q70 (how they would cover a PS400 emergency expense). Combined these provide a reasonably comprehensive understanding of the current financial situation and current financial shock on someone.
+
+In the case of a political opinions side, I would resort to Q64 (left-right self-placement, 0-10), Q58 (political attention, 0-10), and Q66_4 (the government is run by big interests that serve themselves, 1-5) and would access anti-establishment sentiment that could trickle over to the Bank of England perceptions. I could as well add Q60 (party affiliation) to find out whether there are any differences in the partisanship, which I would code as a set of dummy variables.
+
+I would approximate OLS regression model as the DV is a 0-10 scale that is relatively continuous. I would begin with a model that only has the financial situation variables then with a model that only has the political variables and lastly a combined model which has both sets. The values of R-squared would also enable us to compare the models and determine which set of predictors is more effective in explaining the Bank of England trust and whether the two have any independent contribution. This strategy is simple and befitting based on what we have discussed in class.
+
+I would give special attention to some problems. First, measurement: Q3711 is a single item, meaning that we cannot evaluate its reliability independently. We are putting much faith on a question. Second, there is an issue of missing data - the Q37 battery has some 54% missing cases, and with the addition of income (Q71, also having don't know and prefer not to say as possible answers) the sample might decrease further. I would verify that there is a systematic deviation of the complete cases relative to the overall sample with respect to important demographics. Third, the IVs such as income and emergency expense variable are ordinal, rather than actually continuous, thus I would be forced to carefully contemplate whether or not to consider these as numeric or as dummy variables. Fourth, the multicollinearity is also a risk as the financial variables are expected to be interconnected as well as the political ones (e.g. left-right placement and party affiliation). I would look at variance inflation factors to ensure that this is not misleading the coefficient estimates. Lastly, this is a cross-sectional survey, and therefore I cannot assert cause and effect relationships, I can just explain a relationship. Although financial hardship may be associated with less trust, it may be simply the case that less trustful individuals make poor financial choices and not the other way around.
