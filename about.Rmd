@@ -11,12 +11,13 @@ knitr::opts_chunk$set(echo = FALSE)
 
 ## Background
 
-I am a political science student with a strong interest in quantitative methods and data analysis. I enjoy using R and data visualization tools to explore political and social phenomena.
+I am a politics and international relations student with a strong interest in quantitative methods and data analysis. I enjoy using R and data visualization tools to explore political and social phenomena.
 
 Through my coursework in GV300, I have developed skills in:
 
 - Data wrangling and cleaning with `dplyr` and `tidyr`
 - Statistical analysis and hypothesis testing
+- Survey measurement and scale construction (Cronbach's alpha, IRT)
 - Data visualization with `ggplot2`
 - Reproducible research with R Markdown
 
@@ -27,3 +28,4 @@ This site was built using **Distill for R Markdown** and **Postcards**. It is ho
 - The landing page uses the [Postcards](https://github.com/seankross/postcards) package with the Trestles template.
 - The site is powered by [Distill](https://rstudio.github.io/distill/), a publication-quality format for scientific writing.
 - The GV300 showcase page demonstrates code and visualizations from my coursework.
+- The text analysis page covers survey measurement, reliability testing, and scale construction.
